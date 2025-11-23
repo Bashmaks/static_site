@@ -2,6 +2,8 @@ import re
 import os
 import shutil
 
+from pathlib import Path
+
 from my_types import TextType, BlockType
 from textnode import TextNode
 from leafnode import LeafNode
@@ -127,21 +129,38 @@ def heading_block_to_node(block):
     tmp_re = re.compile("^(?P<level>#{1,6}).*")
     m = tmp_re.match(block)
     level = len(m.group("level"))
-    return LeafNode(tag=f"h{level}", value=block.lstrip('#'))
+    nodes = text_to_children(block.lstrip('#').strip())
+    if len(nodes) == 1 and nodes[0].tag is None:
+        return LeafNode(tag=f"h{level}", value=nodes[0].value)
+    return ParentNode(tag=f"h{level}", children=nodes)
+
 
 def quote_block_to_node(block):
     lines = [line.lstrip(">").strip() for line in block.split("\n")]
     return LeafNode(tag="blockquote", value="\n".join(lines))
 
-def unordered_list_block_to_node(block):
-    tmp = lambda x: LeafNode(tag="li", value=x)
+def list_block_to_node(block, ordered=False):
+    def pack_to_li(part):
+        items = text_to_children(part)
+        if len(items) == 1 and items[0].tag is None:
+            return LeafNode(tag="li", value=items[0].value)
+        return ParentNode(tag="li", children=items)
+    if ordered:
+        strip_prefix = lambda x: x.split(".", 1)[-1].strip()
+        tag = "ol"
+    else:
+        strip_prefix = lambda x: x.lstrip("-").strip()
+        tag = "ul"
     lines = [line.lstrip("-").strip() for line in block.split("\n")]
-    return ParentNode(tag="ul", children=map(tmp, lines))
+    lines = list(map(strip_prefix, block.split("\n")))
+    lines = [line for line in lines if len(line) > 0]
+    return ParentNode(tag=tag, children=map(pack_to_li, lines))
+
+def unordered_list_block_to_node(block):
+    return list_block_to_node(block, ordered=False)
 
 def ordered_list_block_to_node(block):
-    tmp = lambda x: LeafNode(tag="li", value=x)
-    lines = [line.split(".", 1)[-1].strip() for line in block.split("\n")]
-    return ParentNode(tag="ol", children=map(tmp, lines))
+    return list_block_to_node(block, ordered=True)
 
 def markdown_to_html_node(markdown):
     blocks = markdown_to_blocks(markdown)
@@ -200,7 +219,7 @@ def copy_tree(source, destination):
         else:
             shutil.copy(src, dst)
     
-def generate_page(from_path, template_path, dest_path):
+def generate_page(from_path, template_path, dest_path, basepath):
     print(f"Generating page from {from_path} to {dest_path} using {template_path}")
     with open(from_path, 'r') as f:
         markdown = f.read()
@@ -209,6 +228,18 @@ def generate_page(from_path, template_path, dest_path):
     content = markdown_to_html_node(markdown).to_html()
     title = extract_title(markdown)
     content = template.replace("{{ Title }}", title).replace("{{ Content }}", content)
+    content = content.replace('href="/', f'href="{basepath}')
+    content = content.replace('src="/', f'src="{basepath}')
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     with open(dest_path, 'w') as f:
         f.write(content)
+
+def generate_pages_recursive(content_dir_path, template_path, dest_dir_path, basepath):
+    source = Path(content_dir_path)
+    destination = Path(dest_dir_path)
+    filenames = source.rglob("*.md")
+    for source_file in filenames:
+        dest_file = destination / source_file.relative_to(source).with_suffix(".html")
+        generate_page(source_file.as_posix(), template_path, dest_file.as_posix(), basepath)
+
 
