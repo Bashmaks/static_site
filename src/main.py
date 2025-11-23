@@ -8,7 +8,6 @@ def main():
         basepath = sys.argv[1]
     else:
         basepath = "/"
-    print(basepath)
     root = os.path.expanduser("~/Projects/Training/boot.dev/static_site/")
     def map_to_root(items):
         return [os.path.join(root, f) for f in items]
