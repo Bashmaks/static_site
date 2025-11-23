@@ -12,7 +12,7 @@ class ParentNode(HTMLNode):
         children = ''.join([child.to_html() for child in self.children])
         if len(self.props) == 0:
             return f"<{self.tag}>{children}</{self.tag}>"
-        return f"<{self.tag} {self.props_to_html()}>{children}</{self.tag}>"
+        return f"<{self.tag}{self.props_to_html()}>{children}</{self.tag}>"
 
     def __repr__(self):
         return f'HTMLNode(tag="{self.tag}", text="{self.value}", children={self.children}, props={self.props})'
